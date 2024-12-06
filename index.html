@@ -19,7 +19,7 @@
     box-shadow: 0 0 10px rgba(0,0,0,0.1);
     overflow-x: auto; /* Allow horizontal scrolling for wide tables */
   }
-  h1, h2 {
+  h1, h2, h3 {
     font-weight: normal; 
     text-align: center;
   }
@@ -50,7 +50,7 @@
     font-weight: bold;
     text-align: left;
   }
-  .btn-container {
+  .btn-container, .input-container {
     text-align: center;
     margin: 20px 0;
   }
@@ -87,11 +87,23 @@
     display: block;
     max-width: 100%;
   }
+  .input-fields {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+  .input-fields input[type="text"] {
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+  }
 </style>
 </head>
 <body>
 <div class="container" id="uploadSection">
-  <h1>Welcome to the  Data Viewer</h1>
+  <h1>Welcome to the Data Viewer</h1>
   <p>Please upload a CSV file containing data (e.g. first_name, last_name, department, salary).</p>
   <input type="file" id="csvFileInput" accept=".csv" />
   <div id="tableContainer"></div>
@@ -110,13 +122,22 @@
   </div>
 </div>
 
-<div class="btn-container">
-  <button id="analysisBtn" style="display:none;">Explore Data Visually</button>
+<div class="container section" id="configSection">
+  <h2>Specify Columns for Analysis</h2>
+  <p>Enter the exact column names as they appear in your CSV. For example, if your CSV has "Abteilung" for department, type "Abteilung" below.</p>
+  <div class="input-fields">
+    <input type="text" id="deptField" placeholder="Department column name"/>
+    <input type="text" id="salaryField" placeholder="Salary column name (optional)"/>
+  </div>
+  <div class="btn-container">
+    <button id="analysisBtn" disabled>Explore Data Visually</button>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
   let parsedData = [];
+  let headers = [];
 
   document.getElementById('csvFileInput').addEventListener('change', function(e) {
     const file = e.target.files[0];
@@ -134,8 +155,8 @@
         return;
       }
 
-      // Parse CSV into an array of objects
-      const headers = rows[0].split(',').map(h => h.replace(/^"(.*)"$/, '$1').trim());
+      // Parse CSV
+      headers = rows[0].split(',').map(h => h.replace(/^"(.*)"$/, '$1').trim());
       parsedData = rows.slice(1).map(row => {
         let values = row.split(',');
         values = values.map(v => v.replace(/^"(.*)"$/, '$1').trim());
@@ -170,14 +191,24 @@
       
       tableContainer.appendChild(table);
 
-      // Show the analysis button now that data is available
-      document.getElementById('analysisBtn').style.display = 'inline-block';
+      // Once data is loaded, show config section for user to specify columns
+      document.getElementById('configSection').classList.add('active');
+      // Enable the analysis button once data is there
+      document.getElementById('analysisBtn').disabled = false;
     };
     reader.readAsText(file);
   });
 
   document.getElementById('analysisBtn').addEventListener('click', function() {
-    // Toggle to show analysis section
+    const deptCol = document.getElementById('deptField').value.trim();
+    const salaryCol = document.getElementById('salaryField').value.trim();
+
+    if (!deptCol) {
+      alert("Please specify the department column name before proceeding.");
+      return;
+    }
+
+    // Toggle analysis section
     const analysisSection = document.getElementById('analysisSection');
     if (analysisSection.classList.contains('active')) {
       analysisSection.classList.remove('active');
@@ -185,18 +216,17 @@
     } else {
       analysisSection.classList.add('active');
       this.textContent = 'Hide Analysis';
-      renderAnalysis();
+      renderAnalysis(deptCol, salaryCol);
     }
   });
 
-  function renderAnalysis() {
-    // Let's assume there's a department column and a salary column
-    // Adjust these column names as per your CSV headers
-    const deptCol = findColumnByName(['department', 'dept']);
-    const salaryCol = findColumnByName(['salary', 'annual_salary']);
+  function renderAnalysis(deptCol, salaryCol) {
+    const statsContainer = document.getElementById('statsContainer');
+    statsContainer.innerHTML = '';
 
-    if (!deptCol) {
-      document.getElementById('statsContainer').textContent = "No department column found. Cannot analyze department data.";
+    // Check if the specified columns exist in the data
+    if (!headers.includes(deptCol)) {
+      statsContainer.textContent = `No '${deptCol}' column found. Cannot analyze department data.`;
       return;
     }
 
@@ -204,7 +234,10 @@
     const deptMap = {};
     parsedData.forEach(d => {
       const dept = d[deptCol] || 'Unknown';
-      const salary = salaryCol ? parseFloat(d[salaryCol]) || 0 : 0;
+      let salary = 0;
+      if (salaryCol && headers.includes(salaryCol)) {
+        salary = parseFloat(d[salaryCol]) || 0;
+      }
       if (!deptMap[dept]) {
         deptMap[dept] = {count: 0, totalSalary: 0};
       }
@@ -212,17 +245,14 @@
       deptMap[dept].totalSalary += salary;
     });
 
-    // Calculate totals
     const totalEmployees = parsedData.length;
     const totalSalary = Object.values(deptMap).reduce((sum, val) => sum + val.totalSalary, 0);
 
-    const statsContainer = document.getElementById('statsContainer');
     statsContainer.innerHTML = `
       <div>Total Employees: ${totalEmployees}</div>
       <div>Total Salary: ${totalSalary.toLocaleString()}</div>
     `;
 
-    // Prepare chart data
     const departments = Object.keys(deptMap);
     const deptCounts = departments.map(d => deptMap[d].count);
     const deptSalaries = departments.map(d => deptMap[d].totalSalary);
@@ -266,18 +296,6 @@
         }
       }
     });
-  }
-
-  function findColumnByName(possibleNames) {
-    // Assuming parsedData and headers are available
-    if (!parsedData || parsedData.length === 0) return null;
-    const sample = parsedData[0];
-    const keys = Object.keys(sample);
-    for (let name of possibleNames) {
-      const found = keys.find(k => k.toLowerCase().includes(name.toLowerCase()));
-      if (found) return found;
-    }
-    return null;
   }
 </script>
 </body>
