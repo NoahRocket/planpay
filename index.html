@@ -11,12 +11,13 @@
     background: #f9f9f9;
   }
   .container {
-    max-width: 600px; 
+    width: 80%;
     margin: 50px auto; 
     background: #fff; 
     padding: 20px; 
     border-radius: 8px; 
     box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    overflow-x: auto; /* Allow horizontal scroll if table is too wide */
   }
   h1 {
     font-size: 24px; 
@@ -36,13 +37,14 @@
   }
   table {
     border-collapse: collapse; 
-    width: 100%; 
-    margin-top: 20px;
+    width: 100%;
+    min-width: 600px; /* Just an example to ensure scroll if many columns */
   }
   th, td {
     border: 1px solid #ddd; 
     padding: 8px; 
     font-size: 14px;
+    white-space: nowrap; /* Keep cells single-line, horizontal scroll available */
   }
   th {
     background: #f5f5f5; 
@@ -78,7 +80,12 @@
 
       const table = document.createElement('table');
       rows.forEach((row, index) => {
-        const cols = row.split(',');
+        // Split by comma
+        let cols = row.split(',');
+
+        // Remove surrounding quotes if present
+        cols = cols.map(col => col.replace(/^"(.*)"$/, '$1'));
+
         const tr = document.createElement('tr');
         cols.forEach(col => {
           const cell = index === 0 ? document.createElement('th') : document.createElement('td');
