@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>HR Data Viewer</title>
+<title>HR Data Viewer & Analysis</title>
 <style>
   body {
     font-family: Arial, sans-serif; 
@@ -17,12 +17,10 @@
     padding: 20px; 
     border-radius: 8px; 
     box-shadow: 0 0 10px rgba(0,0,0,0.1);
-    overflow-x: auto; /* Allow horizontal scroll if table is too wide */
+    overflow-x: auto; /* Allow horizontal scrolling for wide tables */
   }
-  h1 {
-    font-size: 24px; 
+  h1, h2 {
     font-weight: normal; 
-    margin-bottom: 10px;
     text-align: center;
   }
   p {
@@ -38,30 +36,88 @@
   table {
     border-collapse: collapse; 
     width: 100%;
-    min-width: 600px; /* Just an example to ensure scroll if many columns */
+    min-width: 600px; 
+    margin: 20px 0;
   }
   th, td {
     border: 1px solid #ddd; 
     padding: 8px; 
     font-size: 14px;
-    white-space: nowrap; /* Keep cells single-line, horizontal scroll available */
+    white-space: nowrap; 
   }
   th {
     background: #f5f5f5; 
     font-weight: bold;
     text-align: left;
   }
+  .btn-container {
+    text-align: center;
+    margin: 20px 0;
+  }
+  button {
+    background: #007bff;
+    color: #fff;
+    font-size: 16px;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  button:hover {
+    background: #0069d9;
+  }
+  .section {
+    display: none;
+    margin-top: 20px;
+  }
+  .active {
+    display: block;
+  }
+  .stats, .chart-container {
+    max-width: 800px;
+    margin: 20px auto;
+    text-align: center;
+  }
+  .stats div {
+    margin: 10px 0;
+    font-size: 18px;
+  }
+  canvas {
+    margin: 0 auto;
+    display: block;
+    max-width: 100%;
+  }
 </style>
 </head>
 <body>
-<div class="container">
-  <h1>Welcome to the HR Data Viewer</h1>
-  <p>Please upload a CSV file containing HR data (e.g. first_name, last_name, date_of_birth).</p>
+<div class="container" id="uploadSection">
+  <h1>Welcome to the  Data Viewer</h1>
+  <p>Please upload a CSV file containing data (e.g. first_name, last_name, department, salary).</p>
   <input type="file" id="csvFileInput" accept=".csv" />
   <div id="tableContainer"></div>
 </div>
 
+<div class="container section" id="analysisSection">
+  <h2>Data Analysis</h2>
+  <div class="stats" id="statsContainer"></div>
+  <div class="chart-container">
+    <h3>Employees by Department</h3>
+    <canvas id="deptCountChart"></canvas>
+  </div>
+  <div class="chart-container">
+    <h3>Salary by Department</h3>
+    <canvas id="deptSalaryChart"></canvas>
+  </div>
+</div>
+
+<div class="btn-container">
+  <button id="analysisBtn" style="display:none;">Explore Data Visually</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+  let parsedData = [];
+
   document.getElementById('csvFileInput').addEventListener('change', function(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -71,33 +127,158 @@
       const text = e.target.result;
       const rows = text.trim().split('\n');
       const tableContainer = document.getElementById('tableContainer');
-      tableContainer.innerHTML = ''; // Clear previous table if any
+      tableContainer.innerHTML = ''; // Clear previous table
 
       if (rows.length === 0) {
         tableContainer.textContent = "No data found in the file.";
         return;
       }
 
+      // Parse CSV into an array of objects
+      const headers = rows[0].split(',').map(h => h.replace(/^"(.*)"$/, '$1').trim());
+      parsedData = rows.slice(1).map(row => {
+        let values = row.split(',');
+        values = values.map(v => v.replace(/^"(.*)"$/, '$1').trim());
+        const obj = {};
+        headers.forEach((h, i) => {
+          obj[h] = values[i] || '';
+        });
+        return obj;
+      });
+
+      // Create table
       const table = document.createElement('table');
-      rows.forEach((row, index) => {
-        // Split by comma
-        let cols = row.split(',');
+      // Header row
+      const headerRow = document.createElement('tr');
+      headers.forEach(h => {
+        const th = document.createElement('th');
+        th.textContent = h;
+        headerRow.appendChild(th);
+      });
+      table.appendChild(headerRow);
 
-        // Remove surrounding quotes if present
-        cols = cols.map(col => col.replace(/^"(.*)"$/, '$1'));
-
+      // Data rows
+      parsedData.forEach(item => {
         const tr = document.createElement('tr');
-        cols.forEach(col => {
-          const cell = index === 0 ? document.createElement('th') : document.createElement('td');
-          cell.textContent = col.trim();
-          tr.appendChild(cell);
+        headers.forEach(h => {
+          const td = document.createElement('td');
+          td.textContent = item[h];
+          tr.appendChild(td);
         });
         table.appendChild(tr);
       });
+      
       tableContainer.appendChild(table);
+
+      // Show the analysis button now that data is available
+      document.getElementById('analysisBtn').style.display = 'inline-block';
     };
     reader.readAsText(file);
   });
+
+  document.getElementById('analysisBtn').addEventListener('click', function() {
+    // Toggle to show analysis section
+    const analysisSection = document.getElementById('analysisSection');
+    if (analysisSection.classList.contains('active')) {
+      analysisSection.classList.remove('active');
+      this.textContent = 'Explore Data Visually';
+    } else {
+      analysisSection.classList.add('active');
+      this.textContent = 'Hide Analysis';
+      renderAnalysis();
+    }
+  });
+
+  function renderAnalysis() {
+    // Let's assume there's a department column and a salary column
+    // Adjust these column names as per your CSV headers
+    const deptCol = findColumnByName(['department', 'dept']);
+    const salaryCol = findColumnByName(['salary', 'annual_salary']);
+
+    if (!deptCol) {
+      document.getElementById('statsContainer').textContent = "No department column found. Cannot analyze department data.";
+      return;
+    }
+
+    // Aggregate data by department
+    const deptMap = {};
+    parsedData.forEach(d => {
+      const dept = d[deptCol] || 'Unknown';
+      const salary = salaryCol ? parseFloat(d[salaryCol]) || 0 : 0;
+      if (!deptMap[dept]) {
+        deptMap[dept] = {count: 0, totalSalary: 0};
+      }
+      deptMap[dept].count += 1;
+      deptMap[dept].totalSalary += salary;
+    });
+
+    // Calculate totals
+    const totalEmployees = parsedData.length;
+    const totalSalary = Object.values(deptMap).reduce((sum, val) => sum + val.totalSalary, 0);
+
+    const statsContainer = document.getElementById('statsContainer');
+    statsContainer.innerHTML = `
+      <div>Total Employees: ${totalEmployees}</div>
+      <div>Total Salary: ${totalSalary.toLocaleString()}</div>
+    `;
+
+    // Prepare chart data
+    const departments = Object.keys(deptMap);
+    const deptCounts = departments.map(d => deptMap[d].count);
+    const deptSalaries = departments.map(d => deptMap[d].totalSalary);
+
+    // Department Count Chart
+    const deptCountCtx = document.getElementById('deptCountChart').getContext('2d');
+    new Chart(deptCountCtx, {
+      type: 'bar',
+      data: {
+        labels: departments,
+        datasets: [{
+          label: 'Number of Employees',
+          data: deptCounts,
+          backgroundColor: 'rgba(54, 162, 235, 0.7)'
+        }]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          y: { beginAtZero: true }
+        }
+      }
+    });
+
+    // Department Salary Chart
+    const deptSalaryCtx = document.getElementById('deptSalaryChart').getContext('2d');
+    new Chart(deptSalaryCtx, {
+      type: 'bar',
+      data: {
+        labels: departments,
+        datasets: [{
+          label: 'Total Salary',
+          data: deptSalaries,
+          backgroundColor: 'rgba(255, 99, 132, 0.7)'
+        }]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          y: { beginAtZero: true }
+        }
+      }
+    });
+  }
+
+  function findColumnByName(possibleNames) {
+    // Assuming parsedData and headers are available
+    if (!parsedData || parsedData.length === 0) return null;
+    const sample = parsedData[0];
+    const keys = Object.keys(sample);
+    for (let name of possibleNames) {
+      const found = keys.find(k => k.toLowerCase().includes(name.toLowerCase()));
+      if (found) return found;
+    }
+    return null;
+  }
 </script>
 </body>
 </html>
